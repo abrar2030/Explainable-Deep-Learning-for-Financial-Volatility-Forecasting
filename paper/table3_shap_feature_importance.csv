@@ -1,0 +1,13 @@
+Rank,Feature,Mean |SHAP Value|,Interpretation
+1,gpr_index,0.45,Geopolitical shocks drive tail risk
+2,vix,0.38,Market fear gauge - strong predictor
+3,realized_volatility,0.32,Historical volatility persistence
+4,rv_lag1,0.28,Recent volatility (1-day lag)
+5,high_low_spread,0.24,Intraday range indicator
+6,returns_lag1,0.2,Momentum effect from returns
+7,rv_lag5,0.18,Weekly volatility pattern
+8,volume_normalized,0.15,Liquidity indicator
+9,returns,0.12,Current return impact
+10,rv_lag22,0.1,Monthly volatility cycle
+11,returns_lag5,0.08,Weekly return pattern
+12,returns_lag22,0.06,Monthly return effect

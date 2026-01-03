@@ -1,0 +1,5 @@
+Model,Violation Rate (%),Kupiec LR,Christoffersen LR,Result
+Target,1.0,-,-,-
+"GARCH(1,1)",1.8,6.45**,7.12**,Reject
+XGBoost,1.35,2.10,2.85,Accept
+LSTM-Attention,1.05,0.08,0.15,Accept
