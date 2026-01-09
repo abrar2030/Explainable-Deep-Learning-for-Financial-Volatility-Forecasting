@@ -17,48 +17,48 @@ class AttentionLayer(layers.Layer):
     Bahdanau-style Attention mechanism for sequence models.
     Computes attention weights and context vector from LSTM outputs.
     """
-    
+
     def __init__(self, units=64, **kwargs):
         super(AttentionLayer, self).__init__(**kwargs)
         self.units = units
-        
+
     def build(self, input_shape):
         """Initialize attention weights."""
         # W_a: weight matrix for alignment model
         self.W_a = self.add_weight(
-            name='attention_weight',
+            name="attention_weight",
             shape=(input_shape[-1], self.units),
-            initializer='glorot_uniform',
-            trainable=True
+            initializer="glorot_uniform",
+            trainable=True,
         )
-        
+
         # U_a: weight matrix for hidden state
         self.U_a = self.add_weight(
-            name='attention_u',
+            name="attention_u",
             shape=(input_shape[-1], self.units),
-            initializer='glorot_uniform',
-            trainable=True
+            initializer="glorot_uniform",
+            trainable=True,
         )
-        
+
         # v_a: weight vector for computing attention scores
         self.v_a = self.add_weight(
-            name='attention_v',
+            name="attention_v",
             shape=(self.units, 1),
-            initializer='glorot_uniform',
-            trainable=True
+            initializer="glorot_uniform",
+            trainable=True,
         )
-        
+
         super(AttentionLayer, self).build(input_shape)
-    
+
     def call(self, inputs):
         """
         Compute attention weights and context vector.
-        
+
         Parameters:
         -----------
         inputs : tensor
             LSTM outputs (batch_size, time_steps, lstm_units)
-        
+
         Returns:
         --------
         context_vector : tensor
@@ -70,31 +70,33 @@ class AttentionLayer(layers.Layer):
         # score = v_a^T * tanh(W_a * h_j)
         score = tf.nn.tanh(tf.tensordot(inputs, self.W_a, axes=1))
         attention_scores = tf.tensordot(score, self.v_a, axes=1)
-        
+
         # Apply softmax to get attention weights
         attention_weights = tf.nn.softmax(attention_scores, axis=1)
-        
+
         # Compute context vector as weighted sum
-        context_vector = tf.reduce_sum(
-            attention_weights * inputs,
-            axis=1
-        )
-        
+        context_vector = tf.reduce_sum(attention_weights * inputs, axis=1)
+
         return context_vector, attention_weights
-    
+
     def get_config(self):
         """Return configuration for serialization."""
         config = super(AttentionLayer, self).get_config()
-        config.update({'units': self.units})
+        config.update({"units": self.units})
         return config
 
 
-def build_lstm_attention_model(input_shape, lstm_units=[128, 64], 
-                                attention_units=64, dense_units=32,
-                                dropout=0.2, recurrent_dropout=0.1):
+def build_lstm_attention_model(
+    input_shape,
+    lstm_units=[128, 64],
+    attention_units=64,
+    dense_units=32,
+    dropout=0.2,
+    recurrent_dropout=0.1,
+):
     """
     Build LSTM-Attention model for volatility and VaR forecasting.
-    
+
     Parameters:
     -----------
     input_shape : tuple
@@ -109,64 +111,63 @@ def build_lstm_attention_model(input_shape, lstm_units=[128, 64],
         Dropout rate for LSTM and Dense layers
     recurrent_dropout : float
         Recurrent dropout rate for LSTM
-    
+
     Returns:
     --------
     model : keras.Model
         Compiled LSTM-Attention model
     """
     # Input layer
-    inputs = layers.Input(shape=input_shape, name='input_sequence')
-    
+    inputs = layers.Input(shape=input_shape, name="input_sequence")
+
     # First LSTM layer (return sequences for stacking)
     x = layers.LSTM(
         lstm_units[0],
         return_sequences=True,
         dropout=dropout,
         recurrent_dropout=recurrent_dropout,
-        name='lstm_1'
+        name="lstm_1",
     )(inputs)
-    
+
     # Second LSTM layer (return sequences for attention)
     x = layers.LSTM(
         lstm_units[1],
         return_sequences=True,
         dropout=dropout,
         recurrent_dropout=recurrent_dropout,
-        name='lstm_2'
+        name="lstm_2",
     )(x)
-    
+
     # Attention layer
     context_vector, attention_weights = AttentionLayer(
-        units=attention_units,
-        name='attention'
+        units=attention_units, name="attention"
     )(x)
-    
+
     # Dense layer with dropout
-    x = layers.Dense(dense_units, activation='relu', name='dense_1')(context_vector)
-    x = layers.Dropout(dropout, name='dropout')(x)
-    
+    x = layers.Dense(dense_units, activation="relu", name="dense_1")(context_vector)
+    x = layers.Dropout(dropout, name="dropout")(x)
+
     # Output heads
     # Volatility forecasting head
-    volatility_output = layers.Dense(1, activation='linear', name='volatility')(x)
-    
+    volatility_output = layers.Dense(1, activation="linear", name="volatility")(x)
+
     # VaR forecasting head (using same features)
-    var_output = layers.Dense(1, activation='linear', name='var')(x)
-    
+    var_output = layers.Dense(1, activation="linear", name="var")(x)
+
     # Build model with two outputs
     model = Model(
         inputs=inputs,
         outputs=[volatility_output, var_output],
-        name='LSTM_Attention_SHAP'
+        name="LSTM_Attention_SHAP",
     )
-    
+
     return model
 
 
 def pinball_loss(y_true, y_pred, tau=0.01):
     """
     Pinball loss (quantile loss) for VaR prediction.
-    
+
     Parameters:
     -----------
     y_true : tensor
@@ -175,29 +176,27 @@ def pinball_loss(y_true, y_pred, tau=0.01):
         Predicted values
     tau : float
         Quantile level (0.01 for 99% VaR)
-    
+
     Returns:
     --------
     loss : tensor
         Pinball loss value
     """
     error = y_true - y_pred
-    return tf.reduce_mean(
-        tf.maximum(tau * error, (tau - 1) * error)
-    )
+    return tf.reduce_mean(tf.maximum(tau * error, (tau - 1) * error))
 
 
 def compile_model(model, learning_rate=1e-3):
     """
     Compile model with appropriate loss functions and optimizer.
-    
+
     Parameters:
     -----------
     model : keras.Model
         Model to compile
     learning_rate : float
         Learning rate for Adam optimizer
-    
+
     Returns:
     --------
     model : keras.Model
@@ -205,41 +204,33 @@ def compile_model(model, learning_rate=1e-3):
     """
     # Define optimizer
     optimizer = keras.optimizers.Adam(
-        learning_rate=learning_rate,
-        beta_1=0.9,
-        beta_2=0.999
+        learning_rate=learning_rate, beta_1=0.9, beta_2=0.999
     )
-    
+
     # Define losses
     losses = {
-        'volatility': 'mse',  # Mean Squared Error for volatility
-        'var': lambda y_true, y_pred: pinball_loss(y_true, y_pred, tau=0.01)
+        "volatility": "mse",  # Mean Squared Error for volatility
+        "var": lambda y_true, y_pred: pinball_loss(y_true, y_pred, tau=0.01),
     }
-    
+
     # Loss weights (prioritize volatility prediction)
-    loss_weights = {
-        'volatility': 1.0,
-        'var': 0.5
-    }
-    
+    loss_weights = {"volatility": 1.0, "var": 0.5}
+
     # Compile
     model.compile(
         optimizer=optimizer,
         loss=losses,
         loss_weights=loss_weights,
-        metrics={
-            'volatility': ['mae', 'mse'],
-            'var': ['mae']
-        }
+        metrics={"volatility": ["mae", "mse"], "var": ["mae"]},
     )
-    
+
     return model
 
 
 def create_callbacks(patience=15, lr_patience=5, min_delta=0.0001):
     """
     Create training callbacks for early stopping and learning rate reduction.
-    
+
     Parameters:
     -----------
     patience : int
@@ -248,77 +239,76 @@ def create_callbacks(patience=15, lr_patience=5, min_delta=0.0001):
         Patience for learning rate reduction
     min_delta : float
         Minimum change to qualify as improvement
-    
+
     Returns:
     --------
     callbacks : list
         List of Keras callbacks
     """
     early_stopping = keras.callbacks.EarlyStopping(
-        monitor='val_loss',
+        monitor="val_loss",
         patience=patience,
         min_delta=min_delta,
         restore_best_weights=True,
-        verbose=1
+        verbose=1,
     )
-    
+
     reduce_lr = keras.callbacks.ReduceLROnPlateau(
-        monitor='val_loss',
+        monitor="val_loss",
         factor=0.5,
         patience=lr_patience,
         min_delta=min_delta,
-        verbose=1
+        verbose=1,
     )
-    
+
     return [early_stopping, reduce_lr]
 
 
 def get_attention_weights(model, X):
     """
     Extract attention weights from trained model.
-    
+
     Parameters:
     -----------
     model : keras.Model
         Trained LSTM-Attention model
     X : np.array
         Input sequences
-    
+
     Returns:
     --------
     attention_weights : np.array
         Attention weights for each sequence
     """
     # Create intermediate model to extract attention weights
-    attention_layer = model.get_layer('attention')
-    
+    attention_layer = model.get_layer("attention")
+
     # Get LSTM output (input to attention layer)
     lstm_output_model = Model(
-        inputs=model.input,
-        outputs=model.get_layer('lstm_2').output
+        inputs=model.input, outputs=model.get_layer("lstm_2").output
     )
-    
+
     lstm_outputs = lstm_output_model.predict(X, verbose=0)
-    
+
     # Compute attention weights
     _, attention_weights = attention_layer(lstm_outputs)
-    
+
     return attention_weights.numpy()
 
 
 if __name__ == "__main__":
     print("Building LSTM-Attention model...")
-    
+
     # Example: Build model
     input_shape = (30, 12)  # 30 time steps, 12 features
     model = build_lstm_attention_model(input_shape)
     model = compile_model(model)
-    
+
     # Print model summary
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("MODEL ARCHITECTURE")
-    print("="*70)
+    print("=" * 70)
     model.summary()
-    
+
     print(f"\nTotal trainable parameters: {model.count_params():,}")
     print("\nModel built successfully!")
